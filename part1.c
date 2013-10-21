@@ -1,3 +1,5 @@
+// github test
+
 #include <emmintrin.h>
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
