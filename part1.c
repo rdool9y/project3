@@ -12,13 +12,13 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     // the y coordinate of the kernel's center
     int kern_cent_Y = (KERNY - 1)/2;
 
-    int blocksize = 100;
+    int blocksize = 16;
     
     // main convolution loop
 	for(int x = 0; x < data_size_X; x+=blocksize){ // the x coordinate of the output location we're focusing on
 		for(int y = 0; y < data_size_Y; y+=blocksize){ // the y coordinate of theoutput location we're focusing on
-			for (int a = x; a < x + blocksize; a++) {
-				for (int b = y; b < y + blocksize; b++) {
+			for (int a = x; a < x + blocksize && a < data_size_X; a++) {
+				for (int b = y; b < y + blocksize && b < data_size_Y; b++) {
 					for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
 						for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ // kernel unflipped y coordinate
 							// only do the operation if not out of bounds
