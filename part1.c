@@ -22,7 +22,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 					for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
 						for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ // kernel unflipped y coordinate
 							// only do the operation if not out of bounds
-							if(x+i>-1 && x+i<data_size_X && y+j>-1 && y+j<data_size_Y){
+							if(a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y){
 							//Note that the kernel is flipped
 								out[a+b*data_size_X] += 
 									kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
