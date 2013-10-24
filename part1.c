@@ -4,7 +4,7 @@
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
 
-int conv2D2(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -37,7 +37,7 @@ int conv2D2(float* in, float* out, int data_size_X, int data_size_Y,
 }
 
 
-int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D2(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     int kern_cent_X = (KERNX - 1)/2;
