@@ -71,94 +71,121 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 }
 
 
-int conv2D2(float* in, float* out, int data_size_X, int data_size_Y,
+/* zero padding   : yes
+   SSE            : yes
+   cache blocking : yes
+   loop unrolling : no
+
+   key idea for this function : Roger's comment on Piazza at
+   https://piazza.com/class/hhdehma91q41zv?cid=670
+
+   We can accumulate 4 outputs at once if the inner loop runs KERNX*KERNY times.
+   (Each inner loop multiplies and accumulates for one kernel element for four output elements.)
+
+   This solves accumulation issue, and should make vectorization easier (for example, a 4-column's
+   "top left" vector is the same 4-column shifted up by 1 and left by 1).
+
+   Possible problem : leftovers? (basically between 0 and 3 bottom rows)
+*/			   
+int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
+    // the x coordinate of the kernel's center
     int kern_cent_X = (KERNX - 1)/2;
+    // the y coordinate of the kernel's center
     int kern_cent_Y = (KERNY - 1)/2;
 
-    int blocksize = 110;
-    int x_block, y_block, x, y, i, j, k, r;
+    int blocksize = 16; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
 
-    // declare holder of 4 identical kernel elements
-    __m128 kernel_element = _mm_setzero_ps();
+    // Declare Intrinsics Registers :
+    __m128 input_vector = _mm_setzero_ps();
+    __m128 output_vector = _mm_setzero_ps();
+    __m128 kernel_vector = _mm_setzero_ps();
+    __m128 product_vector = _mm_setzero_ps();
+    
+    // build zero-padded copy (padding process could be cache-blocked later?)
+    int padding = (KERNX / 2); 
+    float padded_in[(data_size_X + 2*padding) * (data_size_Y + 2*padding)]; // initialized to zero
 
-    // declare holder of next 4 to multiply
-    __m128 photo = _mm_setzero_ps();
-    float photos_as_floats[4];//__attribute__((aligned(16)));
+    int x,y;
 
-    // declare results holder (and corresponding float array);
-    __m128 result = _mm_setzero_ps();
-    float result_as_array[4];//__attribute__((aligned(16)));
+    for(x = 0; x < data_size_X; x++) {
+	for(y = 0; y < data_size_Y; y++) {
+	    padded_in[(x+padding) + (y+padding)*data_size_X] = in[x+y*data_size_X];
+	}
+    }	
 
+ /* out[a+b*data_size_X] 
+    kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
+ */
 
-    for(i = -kern_cent_X; i <= kern_cent_X; i++) {
-        for(j = -kern_cent_Y; j <= kern_cent_Y; j++) {
-            // fill kernel_element (all four floats are same kernel element)
-  	    kernel_element = _mm_load1_ps(kernel+(kern_cent_X-i)+(kern_cent_Y-j)*KERNX);
-	    
-            for(x_block = 0; x_block <= data_size_X-blocksize ; x_block+=blocksize) {
-                for(y_block = 0; y_block <= data_size_Y-blocksize ; y_block+=blocksize) {
-                    for(x = 0; x < blocksize; x++) {
-                        for(y = 0; y < blocksize; y+=4) {
-                            // fill photo_to_multiply USING if to set to 0.
-			    // possible optimization later if find out row vs. column - major?
-			    // Because can just zero-pad and load directly
+    int a, b, i, j;
+    
+    // main convolution loop
+    for(int x = 0; x < data_size_X; x+=blocksize){ 
+        for(int y = 0; y < data_size_Y; y+=blocksize){ 
+            for(int a = x; a < x + blocksize && a < data_size_X; a++) {        // no leftovers for x
+       	        for(int b = y; b < y + blocksize && b < data_size_Y; b+=4) {   // leftovers for y b/c increment by 4
+                    // set output vector to 0
+                    output_vector = _mm_setzero_ps();
+		    
+		    for(int i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
+		        for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+
+			    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
+			    input_vector = _mm_loadu_ps(padded_in + ((a+i+padding) + (b+j+padding)*data_size_X));
+			    // above must be loadu; can't use aligned load
 			    
-                            for(k = 0; k < 4; k++) {
-			    
-	  	                if((x_block+x+i)>-1 && (x_block+x+i)<data_size_X && (y_block+y+j+k)>-1 && (y_block+y+j+k)<data_size_Y) {
-                                    photos_as_floats[k] = in[(x_block+x+i) + (y_block+y+j+k)*data_size_X]; }
-                                else {
-				    photos_as_floats[k] = 0; }
-			    }
-				
-      			        // multiply and put results in output
-	                        photo = _mm_load_ps(photos_as_floats);	    
-	                        result = _mm_mul_ps (kernel_element, photo);
-			        _mm_store_ps(result_as_array, result);
-                               
-			        for (r = 0; r < 4 ; r++) {                            			    
-			            out[(x_block+x)+((y_block+y+r)*data_size_X)] += result_as_array[r]; }
-			    	
-			}
+                            product_vector = _mm_mul_ps(kernel_vector, input_vector);
+                            output_vector = _mm_add_ps(output_vector, product_vector);
+                         }
                     }
-	        }		    
-	    }		    		    
-	}		    		    
-    }		    			                                    
-
-
-    // leftover (not covered by blocking)
-
-    int y_max = (data_size_Y/blocksize)*blocksize;
-
-   for(i = -kern_cent_X; i <= kern_cent_X; i++){
-       for(j = -kern_cent_Y; j <= kern_cent_Y; j++){
-         for(x = 0; x < data_size_X; x++){
-     	     for(y = y_max; y < data_size_Y; y++){
-	  	   if(x+i>-1 && x+i<data_size_X && y+j>-1 && y+j<data_size_Y){
-	       	       out[x+y*data_size_X] += kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(x+i) + (y+j)*data_size_X];
-                   }
-        	}
+ 		    // After inner loop completes, write output vector to output matrix
+		    // must be storeu; can't use store aligned
+                    _mm_storeu_ps(out + (a + b*data_size_X), output_vector);		      
+		}
 	    }
 	}
     }
-
-   for(i = -kern_cent_X; i <= kern_cent_X; i++){
-       for(j = -kern_cent_Y; j <= kern_cent_Y; j++){
-           for(x = ((data_size_X/blocksize)*blocksize); x < data_size_X; x++){
-               for(y = 0; y < y_max; y++){
-	  	   if(x+i>-1 && x+i<data_size_X && y+j>-1 && y+j<data_size_Y){
-	       	       out[x+y*data_size_X] += kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(x+i) + (y+j)*data_size_X];
-                   }
-        	}
-	    }
-	}
-    }
-	
-
+    
+    // Deal with leftovers (0-3 rows across bottom of out)
+    // Perhaps use horizontal vectors? (would have to load manually because column-major)
+    
     return 1;
+}
+
+
+int fah_lab_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+                    float* kernel)
+{
+    // the x coordinate of the kernel's center
+    int kern_cent_X = (KERNX - 1)/2;
+    // the y coordinate of the kernel's center
+    int kern_cent_Y = (KERNY - 1)/2;
+
+    int blocksize = 16;
+    
+
+    // main convolution loop
+	for(int x = 0; x < data_size_X; x+=blocksize){ // the x coordinate of the output location we're focusing on
+		for(int y = 0; y < data_size_Y; y+=blocksize){ // the y coordinate of theoutput location we're focusing on
+			for (int a = x; a < x + blocksize && a < data_size_X; a++) {
+				for (int b = y; b < y + blocksize && b < data_size_Y; b++) {
+					for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
+						for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ // kernel unflipped y coordinate
+							// only do the operation if not out of bounds
+							if(a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y){
+							//Note that the kernel is flipped
+								out[a+b*data_size_X] += 
+									kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return 1;
 }
 
 int conv2D_CLEAN(float* in, float* out, int data_size_X, int data_size_Y,
