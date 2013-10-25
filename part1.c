@@ -14,6 +14,10 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int kern_cent_Y = (KERNY - 1)/2;
 
     int blocksize = 150;
+    int ker_x[4] = {KERNX,KERNX,KERNX,KERNX};
+    __m128i ker_x_size = __mm_loadu_si128((__m128i*)(ker_x));
+    int dt_size_x[4] = {data_size_X,data_size_X,data_size_X,data_size_X};
+    __m128i dt_x = __mm_loadu_si128((__m128i*)(dt_size_x));
     
     // main convolution loop
 	for(int x = 0; x < data_size_X; x+=blocksize){ // the x coordinate of the output location we're focusing on
@@ -21,17 +25,42 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 			for (int a = x; a < x + blocksize && a < data_size_X; a++) {
 				for (int b = y; b < y + blocksize && b < data_size_Y; b++) {
 					for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
-						for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ // kernel unflipped y coordinate
+						for(int j = -kern_cent_Y; j <= kern_cent_Y && a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y; j++){ // kernel unflipped y coordinate
 							// only do the operation if not out of bounds
 							/*
 						    int sum = 0;
 						    __m128i a_vec = _mm_setzero_sil123();
-						    */
 							if(a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y){
+								*/
 							//Note that the kernel is flipped
+    						for(int c = 0; c < 4; c++) {
+    						    __m128i ker_x_vec = __mm_setzero_si128();
+    						    ker_x_vec = __mm_loadu_si128((__m128i*)(kern_cent_X-i));
+    							__m128i ker_y_vec = __mm_setzero_si128();
+    							ker_y_vec = __mm_loadu_si128((__m128i*)(kern_cent_Y-j));
+    							ker_y_vec = __mm_mul_ps(ker_y_vec, ker_x_size);
+    							ker_x_vec = __mm_add_ps(ker_x_vec, ker_y_vec);
+
+    							__m128i in_a_i = __mm_setzero_si128();
+    							in_a_i = __mm_loadu_si128((__m128i*)(a+i));
+    							__m128i in_b_j = __mm_setzero_si128();
+    							in_b_j = __mm_loadu_si128((__m128i*)(b+j));
+    							in_b_j = __mm_mul_ps(in_b_j, dt_x);
+    							in_a_i = __mm_add_ps(in_a_i, in_b_j);
+
+    							int knl[4] = {0,0,0,0};
+    							int input[4] = {0,0,0,0};
+    							__mm_storeu_si128(knl, ker_x_vec);
+    							__mm_storeu_si128(input, in_a_i);
+
+    							__mm_storeu_si128( knl , ker_x_vec );
+    							__mm_storeu_si128(input, in_a_i);
+
+    							out[a+b*data_size_X] += knl[0];
+
 								out[a+b*data_size_X] += 
 									kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
-									} 
+							} 
 						}
 					}
 				}
