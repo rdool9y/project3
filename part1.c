@@ -5,7 +5,7 @@
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
 
-
+/*
 int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	   float* kernel)
 {
@@ -44,15 +44,15 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	    padded_in[(x+padding_x) + (y+padding_y)*(data_size_X + 2*padding_y)] = in[x+y*data_size_X];
 	}
 	}      
-    /*
-    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
-    for(y =0; y < data_size_Y; y++) {
-	memset(&padded_in, 0.0f, padding_x);
-	memcpy(&padded_in, &in, data_size_X);
-	memset(&padded_in, 0.0f, padding_x);
-    }
-    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
-    */
+    
+//    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
+//    for(y =0; y < data_size_Y; y++) {
+//	memset(&padded_in, 0.0f, padding_x);
+//	memcpy(&padded_in, &in, data_size_X);
+//	memset(&padded_in, 0.0f, padding_x);
+//    }
+//    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
+    
     int a, b, i, j;
     
     // main convolution loop
@@ -112,7 +112,7 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     
     return 1;
 }
-
+*/
 
 /* zero padding   : yes
    SSE            : yes
@@ -130,7 +130,7 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
    Possible problem : leftovers? (basically between 0 and 3 bottom rows)
 */			   
-int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -145,12 +145,13 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     __m128 output_vector = _mm_setzero_ps();
     __m128 kernel_vector = _mm_setzero_ps();
     __m128 product_vector = _mm_setzero_ps();
+
     
     // build zero-padded copy 
     int padding = (KERNX / 2);
     int padded_size = (data_size_X + 2*padding) * (data_size_Y + 2*padding); // not initialized to zero?
-    float* padded_in = malloc(padded_size * sizeof(float));
-    
+    float *padded_in = (float *) malloc(padded_size * sizeof(*padded_in));
+
     int x,y;
 
     for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
@@ -163,14 +164,6 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	}
     }	
 
-    
-    //    for(int z = 0; z < padded_size; z++)
-    //	printf("padded %d : %.4f\n",z,padded_in[z]);
-    
-
-/* out[a+b*data_size_X] 
-    kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
- */
 
     int a, b, i, j;
     
@@ -178,7 +171,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     for(y = 0; y < data_size_Y; y+=blocksize){ 
         for(x = 0; x < data_size_X; x+=blocksize){ 
             for(b = y; b < y + blocksize && b < data_size_Y; b++) {        // no leftovers for y
-       	        for(a = x; a < x + blocksize && a < data_size_X; a+=4) {   // leftovers for x b/c increment by 4
+       	        for(a = x; a < x + blocksize && a <= data_size_X-4; a+=4) {   // leftovers for x b/c increment by 4
                     // set output vector to 0
                     output_vector = _mm_setzero_ps();
 		    
@@ -210,9 +203,9 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
         for(a = (data_size_X/4)*4; a < data_size_X; a++) {   
             // set output to 0
             output_float = 0.0f;
-		    
+
  	    for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
-	        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+	        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){
 		    
 		    kernel_float = kernel[(kern_cent_X-i) + (kern_cent_Y-j)*KERNX];
 		    input_float = padded_in[(a+i+padding) + (b+j+padding)*(data_size_X+2*padding)];
