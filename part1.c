@@ -130,7 +130,7 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
    Possible problem : leftovers? (basically between 0 and 3 bottom rows)
 */			   
-int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     // the x coordinate of the kernel's center
