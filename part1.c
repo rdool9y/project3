@@ -5,70 +5,6 @@
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
 
-int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
-	   float* kernel)
-{
-    // the x coordinate of the kernel's center
-    int kern_cent_X = (KERNX - 1)/2;
-    // the y coordinate of the kernel's center
-    int kern_cent_Y = (KERNY - 1)/2;
-
-    int blocksize = 150;
-    int ker_x[4] = {KERNX,KERNX,KERNX,KERNX};
-    __m128i ker_x_size = __mm_loadu_si128((__m128i*)(ker_x));
-    int dt_size_x[4] = {data_size_X,data_size_X,data_size_X,data_size_X};
-    __m128i dt_x = __mm_loadu_si128((__m128i*)(dt_size_x));
-
-    // main convolution loop
-    for(int x = 0; x < data_size_X; x+=blocksize){ // the x coordinate of the output location we're focusing on
-	for(int y = 0; y < data_size_Y; y+=blocksize){ // the y coordinate of theoutput location we're focusing on
-	    for (int a = x; a < x + blocksize && a < data_size_X; a++) {
-		for (int b = y; b < y + blocksize && b < data_size_Y; b++) {
-		    for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
-			for(int j = -kern_cent_Y; j <= kern_cent_Y && a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y; j++){ // kernel unflipped y coordinate
-			    // only do the operation if not out of bounds
-			    /*
-			                                                       int sum = 0;
-									                                                        __m128i a_vec = _mm_setzero_sil123();
-																                                                        if(a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y){
-			    */
-			    //Note that the kernel is flipped
-			    for(int c = 0; c < 4; c++) {
-				__m128i ker_x_vec = __mm_setzero_si128();
-				ker_x_vec = __mm_loadu_si128((__m128i*)(kern_cent_X-i));
-				__m128i ker_y_vec = __mm_setzero_si128();
-				ker_y_vec = __mm_loadu_si128((__m128i*)(kern_cent_Y-j));
-				ker_y_vec = __mm_mul_ps(ker_y_vec, ker_x_size);
-				ker_x_vec = __mm_add_ps(ker_x_vec, ker_y_vec);
-
-				__m128i in_a_i = __mm_setzero_si128();
-				in_a_i = __mm_loadu_si128((__m128i*)(a+i));
-				__m128i in_b_j = __mm_setzero_si128();
-				in_b_j = __mm_loadu_si128((__m128i*)(b+j));
-				in_b_j = __mm_mul_ps(in_b_j, dt_x);
-				in_a_i = __mm_add_ps(in_a_i, in_b_j);
-
-				int knl[4] = {0,0,0,0};
-				int input[4] = {0,0,0,0};
-				__mm_storeu_si128(knl, ker_x_vec);
-				__mm_storeu_si128(input, in_a_i);
-
-				__mm_storeu_si128( knl , ker_x_vec );
-				__mm_storeu_si128(input, in_a_i);
-
-				out[a+b*data_size_X] += knl[0];
-
-                                out[a+b*data_size_X] +=
-                                kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
-			    }
-			}
-		    }
-		}
-	    }
-	}
-    }
-    return 1;
-}
 
 /* zero padding   : yes
    SSE            : yes
@@ -86,7 +22,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
    Possible problem : leftovers? (basically between 0 and 3 bottom rows)
 */			   
-int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -94,16 +30,7 @@ int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     // the y coordinate of the kernel's center
     int kern_cent_Y = (KERNY - 1)/2;
 
-    int z = 0;
-
-    //  for(int z = 0; z < 9; z++) 
-    //	    printf("kernel element %d : %.4f\n", z, kernel[z]);
-
-    printf("top right is : %.4f\n", in[data_size_X-1]);
-    printf("top right shifted LEFT is : %.4f\n", in[data_size_X-2]);
-    printf("top right shifted DOWN is : %.4f\n", in[data_size_X + data_size_X-1]);
-
-    int blocksize = 8; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
+    int blocksize = 16; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
 
     // Declare Intrinsics Registers :
     __m128 input_vector = _mm_setzero_ps();
@@ -111,11 +38,16 @@ int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     __m128 kernel_vector = _mm_setzero_ps();
     __m128 product_vector = _mm_setzero_ps();
     
-    // build zero-padded copy (padding process could be cache-blocked later?)
-    int padding = (KERNX / 2); 
-    float padded_in[(data_size_X + 2*padding) * (data_size_Y + 2*padding)]; // initialized to zero
-
+    // build zero-padded copy 
+    int padding = (KERNX / 2);
+    int padded_size = (data_size_X + 2*padding) * (data_size_Y + 2*padding); // not initialized to zero?
+    float padded_in[padded_size];
+    
     int x,y;
+
+    for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
+        padded_in[x] = 0.0f;
+    }
 
     for(y = 0; y < data_size_Y; y++) {
         for(x = 0; x < data_size_X; x++) {
@@ -123,7 +55,8 @@ int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	}
     }	
 
- /* out[a+b*data_size_X] 
+
+/* out[a+b*data_size_X] 
     kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
  */
 
@@ -141,7 +74,7 @@ int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 		        for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
 			    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
-			    input_vector = _mm_loadu_ps(padded_in + ((a+i+padding) + (b+j+padding)*data_size_X));
+			    input_vector = _mm_loadu_ps(padded_in + ((a+i+padding) + (b+j+padding)*(data_size_X+2*padding)));
 			    // above must be loadu; can't use aligned load
 			    
                             product_vector = _mm_mul_ps(kernel_vector, input_vector);
