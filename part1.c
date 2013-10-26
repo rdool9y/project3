@@ -96,7 +96,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     // the y coordinate of the kernel's center
     int kern_cent_Y = (KERNY - 1)/2;
 
-    int blocksize = 16; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
+    int blocksize = 256; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
 
     // Declare Intrinsics Registers :
     __m128 input_vector = _mm_setzero_ps();
