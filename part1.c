@@ -107,7 +107,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     // build zero-padded copy 
     int padding = (KERNX / 2);
     int padded_size = (data_size_X + 2*padding) * (data_size_Y + 2*padding); // not initialized to zero?
-    float padded_in[padded_size];
+    float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
 
@@ -133,15 +133,15 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int a, b, i, j;
     
     // main convolution loop
-    for(int y = 0; y < data_size_Y; y+=blocksize){ 
-        for(int x = 0; x < data_size_X; x+=blocksize){ 
-            for(int b = y; b < y + blocksize && b < data_size_Y; b++) {        // no leftovers for y
-       	        for(int a = x; a < x + blocksize && a < data_size_X; a+=4) {   // leftovers for x b/c increment by 4
+    for(y = 0; y < data_size_Y; y+=blocksize){ 
+        for(x = 0; x < data_size_X; x+=blocksize){ 
+            for(b = y; b < y + blocksize && b < data_size_Y; b++) {        // no leftovers for y
+       	        for(a = x; a < x + blocksize && a < data_size_X; a+=4) {   // leftovers for x b/c increment by 4
                     // set output vector to 0
                     output_vector = _mm_setzero_ps();
 		    
-		    for(int i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
-		        for(int j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+		    for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
+		        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
 			    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
 			    input_vector = _mm_loadu_ps(padded_in + ((a+i+padding) + (b+j+padding)*(data_size_X+2*padding)));
@@ -158,9 +158,32 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	    }
 	}
     }
+
+
+    
+    float output_float, kernel_float, input_float, product_float;
     
     // Deal with leftovers (0-3 columns on far right of out)
-    // Perhaps use vertical vectors? (would have to load manually because row-major)
+    for(b = 0; b < data_size_Y; b++) {        
+        for(a = (data_size_X/4)*4; a < data_size_X; a++) {   
+            // set output to 0
+            output_float = 0.0f;
+		    
+ 	    for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
+	        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+		    
+		    kernel_float = kernel[(kern_cent_X-i) + (kern_cent_Y-j)*KERNX];
+		    input_float = padded_in[(a+i+padding) + (b+j+padding)*(data_size_X+2*padding)];
+	    
+                    product_float = kernel_float * input_float;
+                    output_float += product_float;
+                }
+            }
+                    out[a + b*data_size_X] = output_float;
+	}
+    }
+    
+    free(padded_in);
     
     return 1;
 }
