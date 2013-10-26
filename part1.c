@@ -5,7 +5,8 @@
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
 
-int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+/*
+int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	   float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -27,10 +28,10 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 		    for(int i = -kern_cent_X; i <= kern_cent_X; i++){ // kernel unflipped x coordinate
 			for(int j = -kern_cent_Y; j <= kern_cent_Y && a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y; j++){ // kernel unflipped y coordinate
 			    // only do the operation if not out of bounds
-			    /* int sum = 0;
+			    // int sum = 0;
 			       __m128i a_vec = _mm_setzero_sil123();
 			    if(a+i>-1 && a+i<data_size_X && b+j>-1 && b+j<data_size_Y){
-			    */
+			    //
 			    //Note that the kernel is flipped
 			    for(int c = 0; c < 4; c++) {
 				__m128i ker_x_vec = __mm_setzero_si128();
@@ -68,6 +69,8 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     }
     return 1;
 }
+*/
+
 
 /* zero padding   : yes
    SSE            : yes
@@ -85,7 +88,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
    Possible problem : leftovers? (basically between 0 and 3 bottom rows)
 */			   
-int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -109,15 +112,19 @@ int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int x,y;
 
     for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
-        padded_in[x] = 0.0f;
+        padded_in[x] = 0.0f;                                                 // optimize: zero edges only
     }
 
     for(y = 0; y < data_size_Y; y++) {
         for(x = 0; x < data_size_X; x++) {
-	    padded_in[(x+padding) + (y+padding)*data_size_X] = in[x+y*data_size_X];
+	    padded_in[(x+padding) + (y+padding)*(data_size_X + 2*padding)] = in[x+y*data_size_X];
 	}
     }	
 
+    
+    //    for(int z = 0; z < padded_size; z++)
+    //	printf("padded %d : %.4f\n",z,padded_in[z]);
+    
 
 /* out[a+b*data_size_X] 
     kernel[(kern_cent_X-i)+(kern_cent_Y-j)*KERNX] * in[(a+i) + (b+j)*data_size_X];
