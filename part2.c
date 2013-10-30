@@ -44,6 +44,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
+
 // left col padding
    for(y = 0; y < data_size_Y+2*padding_y; y++) 
         for(x = 0; x < padding_x; x++)
@@ -214,25 +215,26 @@ int NO_OPEN_MP_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
+
 // left col padding
    for(y = 0; y < data_size_Y+2*padding_y; y++) 
         for(x = 0; x < padding_x; x++)
-            padded_in[x + y*data_size_X] = 0.0f;
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
 
 // right col padding
    for(y = 0; y < data_size_Y+2*padding_y; y++) 
         for(x = data_size_X+2*padding_x-padding_x; x < data_size_X; x++)
-            padded_in[x + y*data_size_X] = 0.0f;
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
 
 // top row padding
    for(y = 0; y < padding_y; y++) 
         for(x = 0; x < data_size_X+2*padding_x; x++)
-            padded_in[x + y*data_size_X] = 0.0f;
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
 
 // bottom row padding
    for(y = data_size_Y+2*padding_y-padding_y; y < data_size_Y+2*padding_y; y++) 
         for(x = 0; x < data_size_X+2*padding_x; x++)
-            padded_in[x + y*data_size_X] = 0.0f;
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
 
 // fill padded_in with src matrix 
     for(y = 0; y < data_size_Y; y++) {
