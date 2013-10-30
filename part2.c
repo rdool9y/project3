@@ -17,12 +17,13 @@ openMP design:
  (set y_max variable before loop by testing if highest numbered thread)
 
 Writing to shared output array is too slow!
--Write to a private array for each thread and store in shared array of arrays (eg pointer to
- float pointers). After all threads are done, iterate through array of arrays and write to 
- actual output array. This writing can be done in SIMD for each private array until < 3 elements
- remain to write.
--Space of private arrays == output array, so don't put private arrays on the stack, use malloc()
- and free().
+-malloc() private array
+-Write to a private array for each thread
+    -There will be 1 loop per row instead of 3 loops (16, 4, 1). This makes it easier
+     to write to the private array in the right order and improves cache blocking, because
+     the matrix is row-major.
+-After thread fills private array, write to shared memory in critical directive.
+-free() private array
 
 */
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
@@ -86,8 +87,10 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 //    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
     
     int a, b, i, j, y_max;
+    (float *) *all_private_outputs[16];
+    float *private_output;
 
-    # pragma omp parallel private(a, b, i, j, x, y, y_max, kernel_vector, input_vector1, input_vector2, input_vector3, input_vector4,                                                            output_vector1, output_vector2, output_vector3, output_vector4, product_vector1, product_vector2, product_vector3, product_vector4)
+    # pragma omp parallel private(a, b, i, j, x, y, y_max, kernel_vector, input_vector1, input_vector2, input_vector3, input_vector4, output_vector1, output_vector2, output_vector3, output_vector4, product_vector1, product_vector2, product_vector3, product_vector4, private_output)
     {
     int num_threads = omp_get_num_threads();
     int thread_ID = omp_get_thread_num();
@@ -99,7 +102,12 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     }
 
     // printf("ymax : %d\n", y_max);
-       
+    
+//    float* private_output = malloc(data_size_x * y_max * sizeof(float));     // allocate space for each private_output array
+    
+//  # pragma omp critical
+//    all_private_outputs[thread_ID] = private_output;  
+
     // main convolution loop
     
     for(y = thread_ID*(data_size_Y/num_threads); y < y_max; y+=blocksize){ 
