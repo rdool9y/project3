@@ -3,6 +3,17 @@
 #define KERNX 3 //this is the x-size of the kernel. It will always be odd.
 #define KERNY 3 //this is the y-size of the kernel. It will always be odd.
 
+/*
+
+blocksize       : 256 (seems like fastest vs. 128, 512)
+SIMD            : yes
+loop unrolling  : 16, followed by leftovers as SIMD, then leftovers as naive
+fill w/ zero    : naive, could try memcpy or naive on edges only?
+openMP          : no
+
+*/
+
+
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	   float* kernel)
 {
@@ -107,72 +118,38 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	    }
 	}
     }
-/*
-    // Deal with leftovers that are multiples of 4 (16->4->1)
-     for(y = 0; y < data_size_Y; y+=blocksize){ 
-        for(x = 0; x < data_size_X; x+=blocksize){ 
-            for(b = y; b < y + blocksize && b < data_size_Y; b++) {        // no leftovers for y
-       	        for(a = x; a < x + blocksize && a <= data_size_X-4; a+=4) {   // leftovers for x b/c increment by 8
-                    // set output vector to 0
-                    output_vector1 = _mm_setzero_ps();
-		    
-		    for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
-		        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
-			    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
-			    input_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-			    // above must be loadu; can't use aligned load
-			    
-                            product_vector1 = _mm_mul_ps(kernel_vector, input_vector1);
-                            output_vector1 = _mm_add_ps(output_vector1, product_vector1);
-			    
-			    input_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-			    product_vector2 = _mm_mul_ps(kernel_vector, input_vector2);
-			    output_vector2 = _mm_add_ps(output_vector2, product_vector2);
-			    
-			}
-                    }
- 		    // After inner loop completes, write output vector to output matrix
-		    // must be storeu; can't use store aligned
-                    _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
-		    _mm_storeu_ps(out + 4 + (a + b*data_size_X), output_vector2);
-		}
-	    }
-	}
-    }
-*/ 
-    
     float output_float, kernel_float, input_float, product_float;
     
     // Deal with leftovers (0-15 columns on far right of out)
     for(b = 0; b < data_size_Y; b++) {        
-            // Four at a time (One SIMD vector per loop)
-       	    for(a = (data_size_X/16)*16 ; a <= data_size_X-4; a+=4) {   // leftovers for x b/c increment by 8
-                // set output vector to 0
-                output_vector1 = _mm_setzero_ps();
-   
-                for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
-	            for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+        // Four at a time (One SIMD vector per loop)
+       	for(a = (data_size_X/16)*16 ; a <= data_size_X-4; a+=4) {   // leftovers for x b/c increment by 8
+            // set output vector to 0
+            output_vector1 = _mm_setzero_ps();
+  
+            for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
+            for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
-		    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
-		    input_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-		    // above must be loadu; can't use aligned load
+	    kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
+	    input_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+	    // above must be loadu; can't use aligned load
 			    
-                    product_vector1 = _mm_mul_ps(kernel_vector, input_vector1);
-                    output_vector1 = _mm_add_ps(output_vector1, product_vector1);
-             	    }
-                }
- 		    // After inner loop completes, write output vector to output matrix
-		    // must be storeu; can't use store aligned
-                    _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
-		}
+            product_vector1 = _mm_mul_ps(kernel_vector, input_vector1);
+            output_vector1 = _mm_add_ps(output_vector1, product_vector1);
+            }
+            }
+ 	    // After inner loop completes, write output vector to output matrix
+	    // must be storeu; can't use store aligned
+            _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
+	}
 
-            // One at a time 
-            // set output to 0
+        // One at a time 
         for(; a<data_size_X ; a++) {		    
-
+            // set output to 0
             output_float = 0.0f;
- 	    for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
+ 	    
+            for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
 	        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 		    
                     product_float = kernel[(kern_cent_X - i) + (kern_cent_Y-j)*KERNX] * padded_in[(a+i+padding_x)+(b+j+padding_y)*(data_size_X+2*padding_y)];
