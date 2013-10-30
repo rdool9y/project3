@@ -8,7 +8,8 @@
 blocksize       : 256 (seems like fastest vs. 128, 512)
 SIMD            : yes
 loop unrolling  : 16, followed by leftovers as SIMD, then leftovers as naive
-fill w/ zero    : naive, could try memcpy or naive on edges only?
+fill w/ zero    : padding only
+
 openMP          : no
 
 */
@@ -25,26 +26,12 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int blocksize = 256; // must be multiple of 16
 
     // Declare Intrinsics Registers :
-    __m128 kernel_vector = _mm_setzero_ps(); // "shared" by 1-4
+    __m128 kernel_vector; // "shared" by 1-4
+    __m128 input_vector1, output_vector1, product_vector1;
+    __m128 input_vector2, output_vector2, product_vector2;
+    __m128 input_vector3, output_vector3, product_vector3;
+    __m128 input_vector4, output_vector4, product_vector4;
 
-    __m128 input_vector1 = _mm_setzero_ps();
-    __m128 output_vector1 = _mm_setzero_ps();
-    __m128 product_vector1 = _mm_setzero_ps();
-
-    // Intrinsics Registers for unrolling:
-    __m128 input_vector2 = _mm_setzero_ps();
-    __m128 output_vector2 = _mm_setzero_ps();
-    __m128 product_vector2 = _mm_setzero_ps();
-
-    __m128 input_vector3 = _mm_setzero_ps();
-    __m128 output_vector3 = _mm_setzero_ps();
-    __m128 product_vector3 = _mm_setzero_ps();
-
-    __m128 input_vector4 = _mm_setzero_ps();
-    __m128 output_vector4 = _mm_setzero_ps();
-    __m128 product_vector4 = _mm_setzero_ps();
-
-    
     // build zero-padded copy 
     int padding_x = (KERNX / 2);  // can we assume that kernel is a square matrix??
     int padding_y = (KERNY /2);
@@ -52,16 +39,32 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
-    
-    for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
-        padded_in[x] = 0.0f;                                                 // optimize: zero edges only
-	} 
-   
+// left col padding
+   for(y = 0; y < data_size_Y+2*padding_y; y++) 
+        for(x = 0; x < padding_x; x++)
+            padded_in[x + y*data_size_X] = 0.0f;
+
+// right col padding
+   for(y = 0; y < data_size_Y+2*padding_y; y++) 
+        for(x = data_size_X+2*padding_x-padding_x; x < data_size_X; x++)
+            padded_in[x + y*data_size_X] = 0.0f;
+
+// top row padding
+   for(y = 0; y < padding_y; y++) 
+        for(x = 0; x < data_size_X+2*padding_x; x++)
+            padded_in[x + y*data_size_X] = 0.0f;
+
+// bottom row padding
+   for(y = data_size_Y+2*padding_y-padding_y; y < data_size_Y+2*padding_y; y++) 
+        for(x = 0; x < data_size_X+2*padding_x; x++)
+            padded_in[x + y*data_size_X] = 0.0f;
+
+// fill padded_in with src matrix 
     for(y = 0; y < data_size_Y; y++) {
         for(x = 0; x < data_size_X; x++) {
 	    padded_in[(x+padding_x) + (y+padding_y)*(data_size_X + 2*padding_y)] = in[x+y*data_size_X];
 	}
-	}      
+    }      
     
 //    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
 //    for(y =0; y < data_size_Y; y++) {
