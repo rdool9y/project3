@@ -13,11 +13,16 @@ openMP          : yes
 
 openMP design:
 -Divide into blocks of rows so each thread deals with (total rows)/num_threads rows.
--Use lock on output for writes.
 -Use floordiv to divide up rows, so highest numbered thread must deal with remainder:
-    (Test after unrolled loop)
+ (set y_max variable before loop by testing if highest numbered thread)
 
-Possible speedup : copy results to local array and add all together at end?
+Writing to shared output array is too slow!
+-Write to a private array for each thread and store in shared array of arrays (eg pointer to
+ float pointers). After all threads are done, iterate through array of arrays and write to 
+ actual output array. This writing can be done in SIMD for each private array until < 3 elements
+ remain to write.
+-Space of private arrays == output array, so don't put private arrays on the stack, use malloc()
+ and free().
 
 */
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
@@ -80,12 +85,24 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 //    }
 //    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
     
+    int a, b, i, j, y_max;
 
+    # pragma omp parallel private(a, b, i, j, x, y, y_max, kernel_vector, input_vector1, input_vector2, input_vector3, input_vector4,                                                            output_vector1, output_vector2, output_vector3, output_vector4, product_vector1, product_vector2, product_vector3, product_vector4)
+    {
+    int num_threads = omp_get_num_threads();
+    int thread_ID = omp_get_thread_num();
 
-    int a, b, i, j;
-    
+    if (thread_ID == num_threads-1) {     // adjust loop test for leftovers if highest thread_ID
+        y_max = data_size_Y;
+    } else {
+        y_max = (thread_ID+1)*(data_size_Y/num_threads);
+    }
+
+    // printf("ymax : %d\n", y_max);
+       
     // main convolution loop
-    for(y = 0; y < data_size_Y; y+=blocksize){ 
+    
+    for(y = thread_ID*(data_size_Y/num_threads); y < y_max; y+=blocksize){ 
         for(x = 0; x < data_size_X; x+=blocksize){ 
             for(b = y; b < y + blocksize && b < data_size_Y; b++) {        // no leftovers for y
        	        for(a = x; a < x + blocksize && a <= data_size_X-16; a+=16) {   // leftovers for x b/c increment by 8
@@ -121,10 +138,13 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     }
  		    // After inner loop completes, write output vector to output matrix
 		    // must be storeu; can't use store aligned
+                    # pragma omp critical
+                    {
                     _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
 		    _mm_storeu_ps(out + 4 + (a + b*data_size_X), output_vector2);
 		    _mm_storeu_ps(out + 8 + (a + b*data_size_X), output_vector3);
 		    _mm_storeu_ps(out + 12 + (a + b*data_size_X), output_vector4);
+                    }
 		}
 	    }
 	}
@@ -152,6 +172,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
             }
  	    // After inner loop completes, write output vector to output matrix
 	    // must be storeu; can't use store aligned
+            # pragma omp critical
             _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
 	}
 
@@ -167,9 +188,12 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     output_float += product_float;
                 }
             }
+                    #pragma omp critical
                     out[a + b*data_size_X] = output_float;
          }
     }
+
+    } // closes omp parallel
  
     free(padded_in);
     
