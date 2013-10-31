@@ -26,7 +26,7 @@ Writing to shared output array is too slow!
 -free() private array
 
 */
-int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int robert_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	   float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -209,7 +209,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 }
 
 
-int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
+int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
        float* kernel)
 {
     // the x coordinate of the kernel's center
@@ -238,7 +238,8 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
-    
+ 
+    /*
     for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
         padded_in[x] = 0.0f;                                                 // optimize: zero edges only
     } 
@@ -249,18 +250,48 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     }
     }      
     
-    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
-    int pointer = data_size_X+(2*padding_x)*padding_y;
-    for(y =0; y < pointer + data_size_Y; y++) {
-        memset(&padded_in + pointer, 0.0f, padding_x);
-        pointer += padding_x;
-        memcpy(&padded_in + pointer, &in, data_size_X);
-        memset(&padded_in, 0.0f, padding_x);
+    */
+    memset(padded_in, 0.0f, padded_size);
+    for(y =0; y < data_size_Y; y++) {
+	memcpy(padded_in+(padding_x)+(y+padding_y)*(data_size_X+2*padding_y), in + (y*data_size_X), sizeof(float)*data_size_X);
     }
-    memset(&padded_in, 0.0f, (data_size_X+(2*padding_x))*(data_size_Y+(2*padding_y)));
     
     int a, b, i, j;
-    
+
+    int k;
+    float local_kern[KERNX*KERNY];
+    for(k = 0; k < KERNX*KERNY; k++) {
+	local_kern[k] = kernel[k];
+    } 
+/*
+    // left col padding
+   for(y = 0; y < data_size_Y+2*padding_y; y++) 
+        for(x = 0; x < padding_x; x++)
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
+
+// right col padding
+   for(y = 0; y < data_size_Y+2*padding_y; y++) 
+        for(x = data_size_X+2*padding_x-padding_x; x < data_size_X; x++)
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
+
+// top row padding
+   for(y = 0; y < padding_y; y++) 
+        for(x = 0; x < data_size_X+2*padding_x; x++)
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
+
+// bottom row padding
+   for(y = data_size_Y+2*padding_y-padding_y; y < data_size_Y+2*padding_y; y++) 
+        for(x = 0; x < data_size_X+2*padding_x; x++)
+            padded_in[x + y*(data_size_X+2*padding_x)] = 0.0f;
+
+// fill padded_in with src matrix 
+    for(y = 0; y < data_size_Y; y++) {
+        for(x = 0; x < data_size_X; x++) {
+        padded_in[(x+padding_x) + (y+padding_y)*(data_size_X + 2*padding_y)] = in[x+y*data_size_X];
+    }
+    } 
+    */
+
     // main convolution loop
     for(y = 0; y < data_size_Y; y+=blocksize){ 
         for(x = 0; x < data_size_X; x+=blocksize){ 
@@ -273,7 +304,7 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
                         for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
-                            kernel_vector = _mm_load1_ps(kernel + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
+                            kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
                             input_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
                             // above must be loadu; can't use aligned load
                 
@@ -306,7 +337,7 @@ int fah_conv2D(float* in, float* out, int data_size_X, int data_size_Y,
             for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
                 for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
             
-                    product_float = kernel[(kern_cent_X - i) + (kern_cent_Y-j)*KERNX] * padded_in[(a+i+padding_x)+(b+j+padding_y)*(data_size_X+2*padding_y)];
+                    product_float = local_kern[(kern_cent_X - i) + (kern_cent_Y-j)*KERNX] * padded_in[(a+i+padding_x)+(b+j+padding_y)*(data_size_X+2*padding_y)];
                     output_float += product_float;
                 }
             }
