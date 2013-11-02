@@ -15,7 +15,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int blocksize = 256; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
     int blocksize_Y = 16; 
 
-    __m128 kernel_vector, vector1, output_vector1 , vector2, output_vector2, vector3, output_vector3, vector4, output_vector4, next_vector1, next_vector2, next_vector3, next_vector4;
+    __m128 kernel_vector, vector1, output_vector1 , vector2, output_vector2, vector3, output_vector3, vector4, output_vector4, next_vector1, next_vector2, next_vector3, next_vector4, next_kernel;
     
     int padding_x = (KERNX / 2);  // can we assume that kernel is a square matrix??
     int padding_y = (KERNY /2);
@@ -30,7 +30,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	memcpy(padded_in+(padding_x)+(y+padding_y)*(data_size_X+2*padding_y), in + (y*data_size_X), sizeof(float)*data_size_X);
     }
     
-    int a, b, i, j, b_plus_one;
+    int a, b, i, j, b_plus_one, next_i, next_j;
 
     int k;
     float local_kern[KERNX*KERNY];
@@ -40,73 +40,82 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     } 
 
 
-    omp_set_num_threads(10);
+//    omp_set_num_threads(10);
 
-    next_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-    next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-    next_vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
-    next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
+    //    next_vector3 = _mm_loadu_ps(padded_in + ((a-kern_cent_X+padding_x) + (b_plus_one-kern_cent_Y+padding_y)*(data_size_X+2*padding_y)));
+//    next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a-kern_cent_X+padding_x) + (b_plus_one-kern_cent_Y+padding_y)*(data_size_X+2*padding_y)));
 
-    # pragma omp parallel
-    {
+//    # pragma omp parallel
+//    {
 
 //    printf("There are %d threads running\n",omp_get_num_threads());
 
-    # pragma omp for private(a, b, i, j, x, y, b_plus_one, kernel_vector, output_vector1, output_vector2, output_vector3, output_vector4, vector1, vector2, vector3, vector4) firstprivate(local_kern, next_vector1, next_vector2, next_vector3, next_vector4) schedule(dynamic)
+//    # pragma omp for private(a, b, i, j, x, y, b_plus_one, kernel_vector, output_vector1, output_vector2, output_vector3, output_vector4, vector1, vector2, vector3, vector4, next_vector1, next_vector2, next_vector3, next_vector4) firstprivate(local_kern)  schedule(dynamic)
         for(y = 0; y < data_size_Y; y+=blocksize_Y) {
           for(x = 0; x < data_size_X; x+=blocksize){ 
-            for(a = x; a < x + blocksize && a <= data_size_X-8; a+=8) {   
-              for(b = y; b < y + blocksize_Y && b < data_size_Y; b+=2){ 
+
+            for(b = y; b < y + blocksize_Y && b < data_size_Y; b++){ 
+                 for(a = x; a < x + blocksize && a <= data_size_X-8; a+=8) {   
+
+                    next_vector1 = _mm_loadu_ps(padded_in + ((a-kern_cent_X+padding_x) + (b-kern_cent_Y+padding_y)*(data_size_X+2*padding_y)));
+                    next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a-kern_cent_X+padding_x) + (b-kern_cent_Y+padding_y)*(data_size_X+2*padding_y)));
+                    next_kernel = _mm_load1_ps(local_kern + kern_cent_X * 2 + (kern_cent_Y * 2)*KERNX);
+
                     output_vector1 = _mm_setzero_ps();
                     output_vector2 = _mm_setzero_ps();
-                    output_vector3 = _mm_setzero_ps();
-                    output_vector4 = _mm_setzero_ps();
 
-                    b_plus_one = b + 1;
-
-                        for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
+                    next_j = -kern_cent_Y;
+                    next_i = -kern_cent_X;
+                    //output_vector3 = _mm_setzero_ps();
+                    //output_vector4 = _mm_setzero_ps();
+                    //b_plus_one = b + 1;
                         for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
-
-     
+                        for(i = -kern_cent_X; i <= kern_cent_X; i++){   
                             vector1 = next_vector1;
                             vector2 = next_vector2;
-                            vector3 = next_vector3;
-                            vector4 = next_vector4;
+                            kernel_vector = next_kernel;
+                     //       vector3 = next_vector3;
+                     //       vector4 = next_vector4;
+ //                       # pragma omp single nowait
+  //                  {          
+                            if (i == kern_cent_X && j != kern_cent_Y){
+                                next_j = j+1; 
+                                next_i = -kern_cent_X;
+                                } else {
+                                if (i != kern_cent_X)
+                                    next_i = i+1;                                
+                                }
 
-                        # pragma omp single nowait
-                    {          
-                            next_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (2+b+j+padding_y)*(data_size_X+2*padding_y)));
-                            next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-                            next_vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (2+b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
-                            next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
-                    }
+//                            printf("i : %d, j: %d, next_i: %d, next_j: %d\n",i,j,next_i,next_j);
 
-
-                            kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
-                        
+                            next_vector1 = _mm_loadu_ps(padded_in + ((a+next_i+padding_x) + (b+next_j+padding_y)*(data_size_X+2*padding_y)));
+                            next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+next_i+padding_x) + (b+next_j+padding_y)*(data_size_X+2*padding_y)));
+                            next_kernel = _mm_load1_ps(local_kern + ((kern_cent_X-next_i) + (kern_cent_Y-next_j)*KERNX));
+ //                           next_vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
+  //                          next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
+   //                 }
                             vector1 = _mm_mul_ps(kernel_vector, vector1);
                             vector2 = _mm_mul_ps(kernel_vector, vector2);
-                            vector3 = _mm_mul_ps(kernel_vector, vector3);
-                            vector4 = _mm_mul_ps(kernel_vector, vector4);
-
+   //                         vector3 = _mm_mul_ps(kernel_vector, vector3);
+    //                        vector4 = _mm_mul_ps(kernel_vector, vector4);
                             output_vector1 = _mm_add_ps(vector1, output_vector1);
                             output_vector2 = _mm_add_ps(vector2, output_vector2);
-                            output_vector3 = _mm_add_ps(vector3, output_vector3);
-                            output_vector4 = _mm_add_ps(vector4, output_vector4);
+     //                       output_vector3 = _mm_add_ps(vector3, output_vector3);
+     //                       output_vector4 = _mm_add_ps(vector4, output_vector4);
                 
                     }
                     }
                     _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
                     _mm_storeu_ps(out + 4 + (a + b*data_size_X), output_vector2);
-                    _mm_storeu_ps(out + (a + b_plus_one*data_size_X), output_vector3);
-                    _mm_storeu_ps(out + 4 + (a + b_plus_one*data_size_X), output_vector4);
+     //               _mm_storeu_ps(out + (a + b_plus_one*data_size_X), output_vector3);
+     //               _mm_storeu_ps(out + 4 + (a + b_plus_one*data_size_X), output_vector4);
                 }
             }
         }
      }
     
 
-    } // end parallel
+    //} // end parallel
    
     float output_float, kernel_float, input_float, product_float;
     for(b = 0; b < data_size_Y; b++) {        
