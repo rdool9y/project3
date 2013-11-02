@@ -42,17 +42,17 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
     omp_set_num_threads(10);
 
-    vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-    vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
-    vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
-    vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
+    next_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+    next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+    next_vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
+    next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
 
     # pragma omp parallel
     {
 
 //    printf("There are %d threads running\n",omp_get_num_threads());
 
-    # pragma omp for private(a, b, i, j, x, y, b_plus_one, kernel_vector, output_vector1, output_vector2, output_vector3, output_vector4, next_vector1, next_vector2, next_vector3, next_vector4) firstprivate(local_kern, vector1, vector2, vector3, vector4) schedule(dynamic)
+    # pragma omp for private(a, b, i, j, x, y, b_plus_one, kernel_vector, output_vector1, output_vector2, output_vector3, output_vector4, vector1, vector2, vector3, vector4) firstprivate(local_kern, next_vector1, next_vector2, next_vector3, next_vector4) schedule(dynamic)
         for(y = 0; y < data_size_Y; y+=blocksize_Y) {
           for(x = 0; x < data_size_X; x+=blocksize){ 
             for(a = x; a < x + blocksize && a <= data_size_X-8; a+=8) {   
@@ -64,19 +64,23 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
                     b_plus_one = b + 1;
 
-                    # pragma omp single nowait
+                        for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
+                        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+
+     
+                            vector1 = next_vector1;
+                            vector2 = next_vector2;
+                            vector3 = next_vector3;
+                            vector4 = next_vector4;
+
+                        # pragma omp single nowait
                     {          
-                        if (b < data_size_Y-4) 
-                            {
                             next_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (2+b+j+padding_y)*(data_size_X+2*padding_y)));
                             next_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
                             next_vector3 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (2+b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
                             next_vector4 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b_plus_one+j+padding_y)*(data_size_X+2*padding_y)));
-                            }  
                     }
 
-                        for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
-                        for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
                             kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
                         
@@ -90,12 +94,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                             output_vector3 = _mm_add_ps(vector3, output_vector3);
                             output_vector4 = _mm_add_ps(vector4, output_vector4);
                 
-                             
-                            vector1 = next_vector1;
-                            vector2 = next_vector2;
-                            vector3 = next_vector3;
-                            vector4 = next_vector4;
-                        }
+                    }
                     }
                     _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
                     _mm_storeu_ps(out + 4 + (a + b*data_size_X), output_vector2);
