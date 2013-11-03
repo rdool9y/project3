@@ -35,7 +35,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     for(row_index = 0; row_index < data_size_Y; row_index++) 
         memcpy(padded_in+(padding_x)+(row_index+padding_y)*(data_size_X+2*padding_y), in + (row_index*data_size_X), sizeof(float)*data_size_X);
 */
-/*
+
     #pragma omp parallel for
 	for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
 	    padded_in[x] = 0.0f;                                                 // optimize: zero edges only
@@ -47,8 +47,8 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	    }
 	}
 
-*/
 
+/*
     if (data_size_X > 500 && data_size_X < 900 && data_size_Y > 500 && data_size_Y < 900) {
       
         memset(padded_in, 0.0f, padded_size);
@@ -68,7 +68,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 	}
 
     }
-
+*/
     int a, b, i, j;
 
     int k;
