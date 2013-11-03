@@ -7,7 +7,7 @@
 #define kern_cent_X 1
 #define kern_cent_Y 1
 #define blocksize 72 
-#define blocksize_Y 60 
+#define blocksize_Y 55 
 
 //    third submit 
 
