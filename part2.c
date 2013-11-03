@@ -79,6 +79,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 */
     int a, b, i, j;
     float *input_base;
+    float *output_base;
     int k;
     float local_kern[KERNX*KERNY];
 
@@ -93,7 +94,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
 //    printf("There are %d threads running\n",omp_get_num_threads());
 
-# pragma omp for private(a, b, i, j, x, y, kernel_vector, input_vector1, output_vector1, product_vector1, input_vector2, output_vector2, product_vector2, input_vector3, output_vector3,product_vector3,input_vector4,output_vector4,product_vector4,input_vector5,output_vector5,product_vector5,input_vector6,output_vector6,product_vector6,input_vector7,output_vector7,product_vector7,input_vector8,output_vector8,product_vector8,input_vector9,output_vector9,product_vector9,input_base) firstprivate(local_kern) schedule(static,1)
+# pragma omp for private(a, b, i, j, x, y, kernel_vector, input_vector1, output_vector1, product_vector1, input_vector2, output_vector2, product_vector2, input_vector3, output_vector3,product_vector3,input_vector4,output_vector4,product_vector4,input_vector5,output_vector5,product_vector5,input_vector6,output_vector6,product_vector6,input_vector7,output_vector7,product_vector7,input_vector8,output_vector8,product_vector8,input_vector9,output_vector9,product_vector9,input_base,output_base) firstprivate(local_kern) schedule(static,1)
         for(y = 0; y < data_size_Y; y+=blocksize_Y) {
           for(x = 0; x < data_size_X; x+=blocksize){ 
             for(a = x; a < x + blocksize && a <= data_size_X-36; a+=36) {   
@@ -153,17 +154,18 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                             output_vector9 = _mm_add_ps(output_vector9, product_vector9);
                         }
                     }
+                    
+                    output_base = out + a + b*data_size_X;
 		    
-                    // After inner loop completes, write output vector to output matrix
-                    _mm_storeu_ps(out + (a + b*data_size_X), output_vector1);
-                    _mm_storeu_ps(out + 4 + (a + b*data_size_X), output_vector2);
-		    _mm_storeu_ps(out + 8 + (a + b*data_size_X), output_vector3);
-		    _mm_storeu_ps(out + 12 + (a + b*data_size_X), output_vector4);
-		    _mm_storeu_ps(out + 16 + (a + b*data_size_X), output_vector5);
-		    _mm_storeu_ps(out + 20 + (a + b*data_size_X), output_vector6);
-		    _mm_storeu_ps(out + 24 + (a + b*data_size_X), output_vector7);
-		    _mm_storeu_ps(out + 28 + (a + b*data_size_X), output_vector8);
-		    _mm_storeu_ps(out + 32 + (a + b*data_size_X), output_vector9);
+                    _mm_storeu_ps(output_base, output_vector1);
+                    _mm_storeu_ps(output_base + 4, output_vector2);
+		    _mm_storeu_ps(output_base + 8, output_vector3);
+		    _mm_storeu_ps(output_base + 12, output_vector4);
+		    _mm_storeu_ps(output_base + 16, output_vector5);
+		    _mm_storeu_ps(output_base + 20, output_vector6);
+		    _mm_storeu_ps(output_base + 24, output_vector7);
+		    _mm_storeu_ps(output_base + 28, output_vector8);
+		    _mm_storeu_ps(output_base + 32, output_vector9);
 
                 }
             }
