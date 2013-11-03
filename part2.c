@@ -115,8 +115,8 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                     for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop; after all iterations, write 4 output sums
                         for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
-                            kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
 
+                            kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
                             input_base = padded_in + a + i + padding_x + (b+j+padding_y)*padded_row_length;
 			    
                             input_vector1 = _mm_loadu_ps(input_base);
@@ -178,21 +178,39 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     } // end parallel
     //printf("done with parallel\n");
     float output_float, kernel_float, input_float, product_float;
-        for(b = 0; b < data_size_Y; b++) {        
-            for(a = (data_size_X/36)*36; a < data_size_X; a++) {   
-                // set output to 0
-                output_float = 0.0f;
+
+    for(b = 0; b < data_size_Y; b++) {        
+        for(a = (data_size_X/36)*36; a <= data_size_X-4; a+=4) {   
             
-                for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
-                    for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
-            
-                        product_float = local_kern[(kern_cent_X - i) + (kern_cent_Y-j)*KERNX] * padded_in[(a+i+padding_x)+(b+j+padding_y)*(data_size_X+2*padding_y)];
-                        output_float += product_float;
-                    }
+            output_vector1 = _mm_setzero_ps();
+        
+            for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
+                for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+                    kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
+       
+                    input_vector1 = _mm_loadu_ps(padded_in + a + i + padding_x + (b+j+padding_y)*padded_row_length);
+                    product_vector1 = _mm_mul_ps(kernel_vector, input_vector1);
+                    output_vector1 = _mm_add_ps(output_vector1, product_vector1);
+
+                    _mm_storeu_ps(out + a + b*data_size_X, output_vector1);
                 }
-                out[a + b*data_size_X] = output_float;
             }
+            
         }
+        for(; a < data_size_X; a++) {
+            output_float = 0.0f;
+            
+            for(i = -kern_cent_X; i <= kern_cent_X; i++){          // inner loop : all kernel elements
+                for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
+            
+                    product_float = local_kern[(kern_cent_X - i) + (kern_cent_Y-j)*KERNX] * padded_in[(a+i+padding_x)+(b+j+padding_y)*(data_size_X+2*padding_y)];
+                    output_float += product_float;
+                }
+            }
+            out[a + b*data_size_X] = output_float;
+       
+        }
+    }
  
     free(padded_in);
     
