@@ -6,6 +6,8 @@
 #define padding_y 1
 #define kern_cent_X 1
 #define kern_cent_Y 1
+#define blocksize 72
+#define blocksize_Y 50
 
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
        float* kernel)
@@ -16,8 +18,8 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     // the y coordinate of the kernel's center
 //    int kern_cent_Y = (KERNY - 1)/2;
 
-    int blocksize = 72; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
-    int blocksize_Y = 50;
+//    int blocksize = 72; // must be multiple of 4 (or possibly 8/12/16? if loop unrolling)
+//    int blocksize_Y = 50;
 
     __m128 kernel_vector;
     __m128 input_vector1, output_vector1, product_vector1, input_vector2, output_vector2, product_vector2, input_vector3, output_vector3, product_vector3;
@@ -30,20 +32,20 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     float* padded_in = malloc(padded_size * sizeof(float));
     
     int x,y;
-
-    int row_index;
 /*
+    int row_index;
+
     memset(padded_in, 0.0f, padded_size);
     
     for(row_index = 0; row_index < data_size_Y; row_index++) 
         memcpy(padded_in+(padding_x)+(row_index+padding_y)*(data_size_X+2*padding_y), in + (row_index*data_size_X), sizeof(float)*data_size_X);
 */
 
-    #pragma omp parallel for
-	for(x = 0; x < padded_size; x++) {                                       // manually fill with zero
-	    padded_in[x] = 0.0f;                                                 // optimize: zero edges only
+    #pragma omp parallel for 
+	for(x = 0; x < padded_size; x++) { 
+	    padded_in[x] = 0.0f;                                                
 	} 
-    #pragma omp parallel for
+    #pragma omp parallel for 
 	for(y = 0; y < data_size_Y; y++) {
 	    for(x = 0; x < data_size_X; x++) {
 		padded_in[(x+padding_x) + (y+padding_y)*(data_size_X + 2*padding_y)] = in[x+y*data_size_X];
