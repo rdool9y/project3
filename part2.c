@@ -9,6 +9,8 @@
 #define blocksize 72 
 #define blocksize_Y 50
 
+//    second submit (comment added for git commit)
+
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
        float* kernel)
 {
