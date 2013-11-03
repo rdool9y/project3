@@ -9,7 +9,7 @@
 #define blocksize 72 
 #define blocksize_Y 55 
 
-//    third submit 
+//    sixth submit 
 
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
        float* kernel)
@@ -36,7 +36,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     int padded_row_length = data_size_X + 2*padding_x;
     
     
-    int x,y;
+    int x,y,z;
 /*
     int row_index;
 
@@ -47,10 +47,10 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 */
 
     #pragma omp parallel for 
-	for(x = 0; x < padded_size; x++) { 
-	    padded_in[x] = 0.0f;                                                
+	for(z = 0; z < padded_size; z++) { 
+	    padded_in[z] = 0.0f;                                                
 	} 
-    #pragma omp parallel for 
+    #pragma omp parallel for private(x)
 	for(y = 0; y < data_size_Y; y++) {
 	    for(x = 0; x < data_size_X; x++) {
 		padded_in[(x+padding_x) + (y+padding_y)*(data_size_X + 2*padding_y)] = in[x+y*data_size_X];
