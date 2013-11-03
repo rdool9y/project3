@@ -6,7 +6,7 @@
 #define padding_y 1
 #define kern_cent_X 1
 #define kern_cent_Y 1
-#define blocksize 72
+#define blocksize 72 
 #define blocksize_Y 50
 
 int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
@@ -30,6 +30,9 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 //    int padding_y = (KERNY /2);
     int padded_size = (data_size_X + 2*padding_x) * (data_size_Y + 2*padding_y); // not initialized to zero?
     float* padded_in = malloc(padded_size * sizeof(float));
+
+    int padded_row_length = data_size_X + 2*padding_x;
+    
     
     int x,y;
 /*
@@ -75,7 +78,7 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
     }
 */
     int a, b, i, j;
-
+    float *input_base;
     int k;
     float local_kern[KERNX*KERNY];
 
@@ -85,12 +88,12 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
 
 
     omp_set_num_threads(8);
-    # pragma omp parallel
+    # pragma omp parallel shared(padded_in, out, padded_row_length)
     {
 
 //    printf("There are %d threads running\n",omp_get_num_threads());
 
-# pragma omp for private(a, b, i, j, x, y, kernel_vector, input_vector1, output_vector1, product_vector1, input_vector2, output_vector2, product_vector2, input_vector3, output_vector3,product_vector3,input_vector4,output_vector4,product_vector4,input_vector5,output_vector5,product_vector5,input_vector6,output_vector6,product_vector6,input_vector7,output_vector7,product_vector7,input_vector8,output_vector8,product_vector8,input_vector9,output_vector9,product_vector9) firstprivate(local_kern) schedule(static,1)
+# pragma omp for private(a, b, i, j, x, y, kernel_vector, input_vector1, output_vector1, product_vector1, input_vector2, output_vector2, product_vector2, input_vector3, output_vector3,product_vector3,input_vector4,output_vector4,product_vector4,input_vector5,output_vector5,product_vector5,input_vector6,output_vector6,product_vector6,input_vector7,output_vector7,product_vector7,input_vector8,output_vector8,product_vector8,input_vector9,output_vector9,product_vector9,input_base) firstprivate(local_kern) schedule(static,1)
         for(y = 0; y < data_size_Y; y+=blocksize_Y) {
           for(x = 0; x < data_size_X; x+=blocksize){ 
             for(a = x; a < x + blocksize && a <= data_size_X-36; a+=36) {   
@@ -110,40 +113,42 @@ int conv2D(float* in, float* out, int data_size_X, int data_size_Y,
                         for(j = -kern_cent_Y; j <= kern_cent_Y; j++){ 
 
                             kernel_vector = _mm_load1_ps(local_kern + ((kern_cent_X-i) + (kern_cent_Y-j)*KERNX));
+
+                            input_base = padded_in + a + i + padding_x + (b+j+padding_y)*padded_row_length;
 			    
-                            input_vector1 = _mm_loadu_ps(padded_in + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+                            input_vector1 = _mm_loadu_ps(input_base);
                             product_vector1 = _mm_mul_ps(kernel_vector, input_vector1);
                             output_vector1 = _mm_add_ps(output_vector1, product_vector1);
                 
-                            input_vector2 = _mm_loadu_ps(padded_in + 4 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+                            input_vector2 = _mm_loadu_ps(input_base + 4);
                             product_vector2 = _mm_mul_ps(kernel_vector, input_vector2);
                             output_vector2 = _mm_add_ps(output_vector2, product_vector2);
 
-			    input_vector3 = _mm_loadu_ps(padded_in + 8 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector3 = _mm_loadu_ps(input_base + 8);
                             product_vector3 = _mm_mul_ps(kernel_vector, input_vector3);
                             output_vector3 = _mm_add_ps(output_vector3, product_vector3);
 
-			    input_vector4 = _mm_loadu_ps(padded_in + 12 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector4 = _mm_loadu_ps(input_base + 12);
                             product_vector4 = _mm_mul_ps(kernel_vector, input_vector4);
                             output_vector4 = _mm_add_ps(output_vector4, product_vector4);
 
-			    input_vector5 = _mm_loadu_ps(padded_in + 16 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector5 = _mm_loadu_ps(input_base + 16);
                             product_vector5 = _mm_mul_ps(kernel_vector, input_vector5);
                             output_vector5 = _mm_add_ps(output_vector5, product_vector5);
 
-			    input_vector6 = _mm_loadu_ps(padded_in + 20 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector6 = _mm_loadu_ps(input_base + 20);
                             product_vector6 = _mm_mul_ps(kernel_vector, input_vector6);
                             output_vector6 = _mm_add_ps(output_vector6, product_vector6);
 
-			    input_vector7 = _mm_loadu_ps(padded_in + 24 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector7 = _mm_loadu_ps(input_base + 24);
                             product_vector7 = _mm_mul_ps(kernel_vector, input_vector7);
                             output_vector7 = _mm_add_ps(output_vector7, product_vector7);
 
-			    input_vector8 = _mm_loadu_ps(padded_in + 28 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector8 = _mm_loadu_ps(input_base + 28);
                             product_vector8 = _mm_mul_ps(kernel_vector, input_vector8);
                             output_vector8 = _mm_add_ps(output_vector8, product_vector8);
 
-			    input_vector9 = _mm_loadu_ps(padded_in + 32 + ((a+i+padding_x) + (b+j+padding_y)*(data_size_X+2*padding_y)));
+			    input_vector9 = _mm_loadu_ps(input_base + 32);
                             product_vector9 = _mm_mul_ps(kernel_vector, input_vector9);
                             output_vector9 = _mm_add_ps(output_vector9, product_vector9);
                         }
